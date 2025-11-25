@@ -1,0 +1,66 @@
+.claude
+# Binaries
+bin/
+flights-mcp
+flights-mcp-*
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+coverage.out
+coverage.html
+
+# Dependency directories
+vendor/
+
+# Go workspace file
+go.work
+go.work.sum
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Environment files
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+
+# Log files
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+
+# Test artifacts
+test-reports/
+htmlcov/
+
+# Build artifacts
+dist/
+
+# Debug files
+debug
+__debug_bin*
+
+# Chrome user data (created by chromedp)
+chromedp-data/
