@@ -86,28 +86,36 @@ func (s *ChromeDPScraper) SearchFlights(ctx context.Context, req *models.FlightS
 	// Storage for captured API responses
 	var apiResponses [][]byte
 	var apiMu sync.Mutex
+	var captureWg sync.WaitGroup
 
-	// Set up network interception to capture ALL responses for analysis
+	// Track responses and their bodies via LoadingFinished event
+	responseURLs := make(map[network.RequestID]string)
+	var responseMu sync.Mutex
+
 	chromedp.ListenTarget(browserCtx, func(ev interface{}) {
 		switch e := ev.(type) {
 		case *network.EventResponseReceived:
 			url := e.Response.URL
-			mimeType := e.Response.MimeType
-
-			// Log all requests for debugging
-			if strings.Contains(url, "google") {
-				log.Printf("Response: %s (mime: %s, status: %d)", url[:min(100, len(url))], mimeType, e.Response.Status)
+			// Track URLs we're interested in
+			if strings.Contains(url, "FlightsFrontendService") ||
+			   strings.Contains(url, "batchexecute") {
+				responseMu.Lock()
+				responseURLs[e.RequestID] = url
+				responseMu.Unlock()
+				log.Printf("Tracking response: %s", url[:min(80, len(url))])
 			}
 
-			// Capture responses that might contain flight data
-			// Google uses FlightsFrontendService for flight data
-			if strings.Contains(url, "FlightsFrontendService") ||
-			   strings.Contains(url, "batchexecute") ||
-			   strings.Contains(mimeType, "protobuf") {
-				go func(requestID network.RequestID, capturedURL string) {
-					// Small delay to ensure response is ready
-					time.Sleep(100 * time.Millisecond)
+		case *network.EventLoadingFinished:
+			// Response is now complete, safe to get body
+			responseMu.Lock()
+			url, tracked := responseURLs[e.RequestID]
+			delete(responseURLs, e.RequestID)
+			responseMu.Unlock()
 
+			if tracked {
+				captureWg.Add(1)
+				go func(requestID network.RequestID, capturedURL string) {
+					defer captureWg.Done()
 					var body []byte
 					err := chromedp.Run(browserCtx,
 						chromedp.ActionFunc(func(ctx context.Context) error {
@@ -119,7 +127,7 @@ func (s *ChromeDPScraper) SearchFlights(ctx context.Context, req *models.FlightS
 					if err == nil && len(body) > 100 {
 						apiMu.Lock()
 						apiResponses = append(apiResponses, body)
-						log.Printf("*** CAPTURED batchexecute: %d bytes", len(body))
+						log.Printf("*** CAPTURED: %d bytes from %s", len(body), capturedURL[:min(60, len(capturedURL))])
 						apiMu.Unlock()
 					} else if err != nil {
 						log.Printf("Failed to get response body: %v", err)
@@ -202,6 +210,10 @@ func (s *ChromeDPScraper) SearchFlights(ctx context.Context, req *models.FlightS
 	if err != nil {
 		return nil, fmt.Errorf("scraping failed: %w", err)
 	}
+
+	// Wait for all capture goroutines to complete
+	log.Println("Waiting for API captures to complete...")
+	captureWg.Wait()
 
 	// Log captured responses
 	apiMu.Lock()

@@ -36,10 +36,7 @@ type FlightLeg struct {
 
 // ParseGoogleFlightsData parses the Google Flights API response.
 func ParseGoogleFlightsData(data []byte) ([]*models.FlightResult, error) {
-	// Unescape the data (Google's format has escaped quotes within JSON strings)
 	dataStr := string(data)
-	dataStr = strings.ReplaceAll(dataStr, `\"`, `"`)
-	dataStr = strings.ReplaceAll(dataStr, `\\`, `\`)
 
 	// Skip the )]}' prefix if present
 	if strings.HasPrefix(dataStr, ")]}'") {
@@ -51,77 +48,170 @@ func ParseGoogleFlightsData(data []byte) ([]*models.FlightResult, error) {
 		dataStr = strings.TrimSpace(dataStr[idx+1:])
 	}
 
-	// Parse as generic JSON
-	var rawData []interface{}
-	if err := json.Unmarshal([]byte(dataStr), &rawData); err != nil {
-		// Try parsing line by line
-		lines := strings.Split(dataStr, "\n")
-		for _, line := range lines {
+	// Parse outer JSON structure
+	var outerData []interface{}
+	if err := json.Unmarshal([]byte(dataStr), &outerData); err != nil {
+		// Try line by line
+		for _, line := range strings.Split(dataStr, "\n") {
 			line = strings.TrimSpace(line)
 			if strings.HasPrefix(line, "[") {
-				if err := json.Unmarshal([]byte(line), &rawData); err == nil {
+				if err := json.Unmarshal([]byte(line), &outerData); err == nil {
 					break
 				}
 			}
 		}
-		if rawData == nil {
-			return nil, fmt.Errorf("failed to parse JSON: %w", err)
+		if outerData == nil {
+			return nil, fmt.Errorf("failed to parse outer JSON: %w", err)
 		}
 	}
 
-	// Extract flights from the nested structure
-	flights := extractFlights(rawData)
-	return flights, nil
+	// Google's response structure: [["wrb.fr", null, "[[flight_data]]", ...], ...]
+	// The flight data is embedded as a string at position [0][2]
+	var allFlights []*models.FlightResult
+
+	for _, item := range outerData {
+		arr, ok := item.([]interface{})
+		if !ok || len(arr) < 3 {
+			continue
+		}
+
+		// Check if this is a data wrapper (first element is "wrb.fr")
+		if first, ok := arr[0].(string); ok && first == "wrb.fr" {
+			// Element at index 2 is the embedded JSON string
+			if embeddedStr, ok := arr[2].(string); ok && len(embeddedStr) > 100 {
+				// Parse the embedded JSON
+				var innerData interface{}
+				if err := json.Unmarshal([]byte(embeddedStr), &innerData); err == nil {
+					flights := extractFlights(innerData)
+					allFlights = append(allFlights, flights...)
+					log.Printf("Extracted %d flights from embedded data", len(flights))
+				}
+			}
+		}
+	}
+
+	if len(allFlights) == 0 {
+		// Fall back to searching the entire structure
+		allFlights = extractFlights(outerData)
+	}
+
+	return allFlights, nil
 }
 
-// extractFlights recursively searches for flight data.
+// extractFlights searches for flight data in the parsed structure.
+// Google's structure: embedded[2][0][X] or embedded[3][0][X] where X is a wrapper containing:
+//   - [0] = flight data array
+//   - [1][0] = [nil, price]
 func extractFlights(data interface{}) []*models.FlightResult {
 	var results []*models.FlightResult
 	seenKeys := make(map[string]bool)
 
-	var search func(interface{}, int)
-	search = func(v interface{}, depth int) {
-		if depth > 20 {
-			return // Prevent infinite recursion
+	arr, ok := data.([]interface{})
+	if !ok {
+		return nil
+	}
+
+	// Check indices 2 and 3 for flight groups
+	for _, groupIdx := range []int{2, 3} {
+		if groupIdx >= len(arr) {
+			continue
 		}
 
-		arr, ok := v.([]interface{})
+		group, ok := arr[groupIdx].([]interface{})
+		if !ok || len(group) == 0 {
+			continue
+		}
+
+		// group[0] contains the flights array
+		flightsArr, ok := group[0].([]interface{})
 		if !ok {
-			return
+			continue
 		}
 
-		// Try to parse this array as a flight
-		if flight := tryParseAsFlight(arr); flight != nil {
-			// Create unique key to avoid duplicates
-			key := fmt.Sprintf("%s-%s-%d:%02d-%d",
-				flight.Airline, flight.DepartureTime, flight.ArrivalTime, flight.Price)
-			if !seenKeys[key] {
-				seenKeys[key] = true
-				results = append(results, flight)
+		for _, flightWrapper := range flightsArr {
+			wrapper, ok := flightWrapper.([]interface{})
+			if !ok || len(wrapper) < 2 {
+				continue
 			}
-		}
 
-		// Recurse into array elements
-		for _, item := range arr {
-			search(item, depth+1)
+			// wrapper[0] is the flight data, wrapper[1] contains price
+			flightData, ok := wrapper[0].([]interface{})
+			if !ok {
+				continue
+			}
+
+			// Extract price from wrapper[1][0] = [nil, price]
+			price := 0
+			if priceArr, ok := wrapper[1].([]interface{}); ok && len(priceArr) > 0 {
+				if pricePair, ok := priceArr[0].([]interface{}); ok && len(pricePair) == 2 {
+					if pricePair[0] == nil {
+						if p, ok := toInt(pricePair[1]); ok && p > 0 {
+							price = p
+						}
+					}
+				}
+			}
+
+			if flight := tryParseAsFlightWithPrice(flightData, price); flight != nil {
+				key := fmt.Sprintf("%s-%s-%s-%s",
+					flight.Airline, flight.DepartureTime, flight.ArrivalTime, flight.Price)
+				if !seenKeys[key] {
+					seenKeys[key] = true
+					results = append(results, flight)
+				}
+			}
 		}
 	}
 
-	search(data, 0)
+	// Fallback: recursive search if structured approach fails
+	if len(results) == 0 {
+		var search func(interface{}, int)
+		search = func(v interface{}, depth int) {
+			if depth > 15 {
+				return
+			}
+			arr, ok := v.([]interface{})
+			if !ok {
+				return
+			}
+			if flight := tryParseAsFlightWithPrice(arr, 0); flight != nil {
+				key := fmt.Sprintf("%s-%s-%s-%s",
+					flight.Airline, flight.DepartureTime, flight.ArrivalTime, flight.Price)
+				if !seenKeys[key] {
+					seenKeys[key] = true
+					results = append(results, flight)
+				}
+			}
+			for _, item := range arr {
+				search(item, depth+1)
+			}
+		}
+		search(data, 0)
+	}
+
 	return results
 }
 
-// tryParseAsFlight attempts to parse an array as a flight entry.
-// Google's flight format is:
-// ["F9", ["Frontier"], [...legs...], "JFK", [date], [time], "LAX", [date], [time], duration, ..., [[null, price]]]
-func tryParseAsFlight(arr []interface{}) *models.FlightResult {
+// tryParseAsFlightWithPrice attempts to parse an array as a flight entry with an external price.
+// Google's flight format:
+// [0] "F9"           - Airline code
+// [1] ["Frontier"]   - Airline name
+// [2] [[leg1], [leg2], ...]  - Flight legs
+// [3] "JFK"          - Origin airport
+// [4] [2025, 12, 25] - Departure date
+// [5] [6, 20]        - Departure time [hour, minute]
+// [6] "LAX"          - Destination airport
+// [7] [2025, 12, 25] - Arrival date
+// [8] [14, 3]        - Arrival time [hour, minute]
+// [9] 643            - Duration in minutes
+func tryParseAsFlightWithPrice(arr []interface{}, price int) *models.FlightResult {
 	if len(arr) < 10 {
 		return nil
 	}
 
 	// Check for airline code pattern (2 chars at position 0)
 	airlineCode, ok := arr[0].(string)
-	if !ok || len(airlineCode) != 2 {
+	if !ok || len(airlineCode) < 2 || len(airlineCode) > 3 {
 		return nil
 	}
 
@@ -136,71 +226,73 @@ func tryParseAsFlight(arr []interface{}) *models.FlightResult {
 	}
 
 	// Look for known airlines to validate
+	// This list includes major US, European, and international carriers
 	knownAirlines := map[string]bool{
+		// US airlines
 		"Frontier": true, "JetBlue": true, "American": true, "Delta": true,
 		"United": true, "Southwest": true, "Spirit": true, "Alaska": true,
-		"Volaris": true, "Sun Country Airlines": true,
+		"Volaris": true, "Sun Country Airlines": true, "Hawaiian Airlines": true,
+		// European airlines
+		"Air France": true, "SWISS": true, "Lufthansa": true, "British Airways": true,
+		"KLM": true, "Iberia": true, "Condor": true, "Ryanair": true, "easyJet": true,
+		"Vueling": true, "TAP Portugal": true, "SAS": true, "Norwegian": true,
+		"Finnair": true, "Austrian": true, "Brussels Airlines": true, "LOT Polish Airlines": true,
+		"Aer Lingus": true, "Eurowings": true, "Transavia": true, "Wizz Air": true,
+		// Middle East & Asia
+		"Emirates": true, "Qatar Airways": true, "Etihad": true, "Turkish Airlines": true,
+		"Singapore Airlines": true, "Cathay Pacific": true, "ANA": true, "JAL": true,
+		"Korean Air": true, "Asiana Airlines": true, "Air China": true, "China Eastern": true,
+		"China Southern": true, "Hainan Airlines": true, "Thai Airways": true,
+		// Other international
+		"Air Canada": true, "WestJet": true, "Qantas": true, "Virgin Atlantic": true,
+		"Virgin Australia": true, "LATAM": true, "Avianca": true, "Copa Airlines": true,
+		"Aeromexico": true, "Air New Zealand": true, "South African Airways": true,
 	}
 	if !knownAirlines[airlineName] {
 		return nil
 	}
 
-	// Find origin airport (3-letter string)
 	var origin, destination string
 	var depTime, arrTime [2]int
 	var duration int
-	var price int
 
-	// Scan the array for expected patterns
-	for i, item := range arr {
-		switch v := item.(type) {
-		case string:
-			// 3-letter codes are likely airports
-			if len(v) == 3 && v == strings.ToUpper(v) {
-				if origin == "" {
-					origin = v
-				} else if destination == "" && v != origin {
-					destination = v
-				}
-			}
-		case []interface{}:
-			// [hour, minute] for times
-			if len(v) == 2 {
-				h, hOk := toInt(v[0])
-				m, mOk := toInt(v[1])
-				if hOk && mOk && h >= 0 && h <= 23 && m >= 0 && m <= 59 {
-					if depTime[0] == 0 && depTime[1] == 0 {
-						depTime = [2]int{h, m}
-					} else if arrTime[0] == 0 && arrTime[1] == 0 {
-						arrTime = [2]int{h, m}
-					}
-				}
-			}
-			// [[null, price]] for price
-			if len(v) == 1 {
-				if inner, ok := v[0].([]interface{}); ok && len(inner) == 2 {
-					if inner[0] == nil {
-						if p, ok := toInt(inner[1]); ok && p > 50 && p < 50000 {
-							price = p
-						}
-					}
-				}
-			}
-		case float64:
-			// Duration in minutes (typically 100-2000)
-			if i > 5 && int(v) >= 60 && int(v) <= 2000 && duration == 0 {
-				duration = int(v)
-			}
+	// Origin at [3]
+	if o, ok := arr[3].(string); ok && len(o) == 3 {
+		origin = o
+	}
+
+	// Destination at [6]
+	if d, ok := arr[6].(string); ok && len(d) == 3 {
+		destination = d
+	}
+
+	// Departure time at [5]
+	if len(arr) > 5 && arr[5] != nil {
+		depTime = parseTimeArray(arr[5])
+	}
+
+	// Arrival time at [8]
+	if len(arr) > 8 && arr[8] != nil {
+		arrTime = parseTimeArray(arr[8])
+	}
+
+	// Duration at [9]
+	if len(arr) > 9 {
+		if d, ok := toInt(arr[9]); ok && d > 0 {
+			duration = d
 		}
 	}
 
 	// Validate we have minimum required data
-	if origin == "" || destination == "" || price == 0 {
+	if origin == "" || destination == "" {
 		return nil
 	}
 
-	// Count stops by looking for intermediate airports
-	stops := countStops(arr, origin, destination)
+	// Number of stops = number of legs - 1
+	stops := 0
+	if legs, ok := arr[2].([]interface{}); ok {
+		stops = len(legs) - 1
+	}
 
 	// Format times
 	depTimeStr := formatTimeHM(depTime[0], depTime[1])
@@ -212,6 +304,12 @@ func tryParseAsFlight(arr []interface{}) *models.FlightResult {
 		durationStr = fmt.Sprintf("%d hr %d min", duration/60, duration%60)
 	}
 
+	// Format price
+	priceStr := "Price unavailable"
+	if price > 0 {
+		priceStr = fmt.Sprintf("CHF %d", price)
+	}
+
 	return &models.FlightResult{
 		FlightName:    airlineCode,
 		Airline:       airlineName,
@@ -219,7 +317,7 @@ func tryParseAsFlight(arr []interface{}) *models.FlightResult {
 		ArrivalTime:   arrTimeStr,
 		Duration:      durationStr,
 		Stops:         stops,
-		Price:         fmt.Sprintf("CHF %d", price),
+		Price:         priceStr,
 		IsBest:        false,
 	}
 }
@@ -267,6 +365,39 @@ func toInt(v interface{}) (int, bool) {
 		return int(n), true
 	}
 	return 0, false
+}
+
+// parseTimeArray extracts hour and minute from a time array.
+// Handles various formats:
+// - [hour, minute] - normal format
+// - [hour] - hour only, minute defaults to 0
+// - [nil, minute] - hour is 0 (midnight/12 AM)
+func parseTimeArray(v interface{}) [2]int {
+	t, ok := v.([]interface{})
+	if !ok || len(t) == 0 {
+		return [2]int{0, 0}
+	}
+
+	var hour, minute int
+
+	// Parse hour (can be nil for midnight)
+	if t[0] != nil {
+		h, ok := toInt(t[0])
+		if ok {
+			hour = h
+		}
+	}
+	// If hour is nil, it stays 0 (midnight)
+
+	// Parse minute if present
+	if len(t) >= 2 && t[1] != nil {
+		m, ok := toInt(t[1])
+		if ok {
+			minute = m
+		}
+	}
+
+	return [2]int{hour, minute}
 }
 
 // formatTimeHM formats hour and minute as "H:MM AM/PM".

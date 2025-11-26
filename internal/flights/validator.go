@@ -50,12 +50,14 @@ func (v *Validator) Validate(req *models.FlightSearchRequest) *ValidationResult 
 	}
 
 	// Validate departure date
-	depDate, err := time.Parse("2006-01-02", req.DepartureDate)
+	depDate, err := time.ParseInLocation("2006-01-02", req.DepartureDate, time.Local)
 	if err != nil {
 		result.Valid = false
 		result.Errors = append(result.Errors, fmt.Sprintf("Invalid departure date format: %s (use YYYY-MM-DD)", req.DepartureDate))
 	} else {
-		today := time.Now().Truncate(24 * time.Hour)
+		// Get today's date at midnight in local timezone
+		now := time.Now()
+		today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local)
 		if depDate.Before(today) {
 			result.Valid = false
 			result.Errors = append(result.Errors, "Departure date cannot be in the past")
@@ -68,7 +70,7 @@ func (v *Validator) Validate(req *models.FlightSearchRequest) *ValidationResult 
 			result.Valid = false
 			result.Errors = append(result.Errors, "Return date is required for round-trip flights")
 		} else {
-			retDate, err := time.Parse("2006-01-02", req.ReturnDate)
+			retDate, err := time.ParseInLocation("2006-01-02", req.ReturnDate, time.Local)
 			if err != nil {
 				result.Valid = false
 				result.Errors = append(result.Errors, fmt.Sprintf("Invalid return date format: %s (use YYYY-MM-DD)", req.ReturnDate))
