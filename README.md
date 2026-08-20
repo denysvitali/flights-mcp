@@ -1,53 +1,57 @@
-# Flights MCP Server
+# flights-mcp
 
-A Model Context Protocol (MCP) server that exposes Google Flights search functionality as MCP tools. This allows LLMs like Claude to search for flights directly through a standardized protocol.
+[![CI](https://github.com/denysvitali/flights-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/denysvitali/flights-mcp/actions/workflows/ci.yml)
+[![Go Reference](https://pkg.go.dev/badge/github.com/denysvitali/flights-mcp.svg)](https://pkg.go.dev/github.com/denysvitali/flights-mcp)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-**Written in Go** for single-binary deployment, better performance, and production robustness.
+A [Model Context Protocol](https://modelcontextprotocol.io) (MCP) server that lets
+LLMs like Claude search Google Flights. Single Go binary, no browser, no API key.
 
-## Features
+```
+> search_flights from JFK to LAX on 2026-12-15
 
-- **Flight Search**: Search for flights between airports using Google Flights
-- **No Browser Needed**: Plain HTTP with a protobuf-encoded search URL — no Chrome, no headless browser
-- **Airport Information**: Get details about airports (50+ major airports embedded in the binary)
-- **Parameter Validation**: Validate flight search parameters before making requests
-- **MCP Compliant**: Built using the mcp-go SDK
-- **Single Binary**: No runtime dependencies, easy deployment
+208 flights found — cheapest $178
+Best: Alaska 7:00 AM -> 2:56 PM, 1 stop, $178
+      JetBlue 1:45 PM -> 10:38 PM, 1 stop, $178
+      ...
+```
+
+## How it works
+
+Google Flights encodes searches in a `tfs=` URL parameter — a base64url
+protobuf message describing the itinerary. This server builds that message
+with a small hand-rolled protobuf encoder (schema reverse-engineered by
+[fast-flights](https://github.com/AWeirdDev/flights)), fetches the
+server-rendered results page over plain HTTPS with a consent cookie, and
+parses the HTML with goquery. No headless browser involved.
 
 ## Installation
 
-### From Source
-
 ```bash
-# Clone the repository
+# With Go
+go install github.com/denysvitali/flights-mcp/cmd/flights-mcp@latest
+
+# Or from source
 git clone https://github.com/denysvitali/flights-mcp.git
 cd flights-mcp
-
-# Build the binary
-make build
-
-# Or install to GOPATH/bin
-make install
+make build   # binary in bin/flights-mcp
 ```
 
-### From Binary
-
-Download the latest release from the [Releases](https://github.com/denysvitali/flights-mcp/releases) page.
-
-### Requirements
-
-- Go 1.25+ (for building)
+Prebuilt binaries are on the [Releases](https://github.com/denysvitali/flights-mcp/releases)
+page. Building needs Go 1.25+; running needs nothing else — the airport
+database is embedded in the binary.
 
 ## Usage
 
-### As MCP Server
-
-Start the MCP server (connects via stdio):
+### With Claude Code
 
 ```bash
-flights-mcp run
+claude mcp add flights -- flights-mcp run
 ```
 
-Add to your Claude Desktop configuration (`~/.config/claude/claude_desktop_config.json`):
+### With Claude Desktop
+
+Add to `~/.config/claude/claude_desktop_config.json`:
 
 ```json
 {
@@ -60,22 +64,23 @@ Add to your Claude Desktop configuration (`~/.config/claude/claude_desktop_confi
 }
 ```
 
-### CLI Commands
+### With Docker
 
 ```bash
-# Show server information
-flights-mcp info
+make docker-build
+docker run -i --rm flights-mcp:latest run
+```
 
-# Get airport information
-flights-mcp airport JFK
+### CLI
 
-# Validate search parameters
-flights-mcp validate JFK LAX 2025-12-15
+The binary doubles as a CLI for local testing:
 
-# Test flight search directly
-flights-mcp test JFK LAX 2025-12-15
-
-# Show version
+```bash
+flights-mcp info                            # server info + tool list
+flights-mcp airport JFK                     # airport lookup
+flights-mcp validate JFK LAX 2026-12-15     # parameter validation
+flights-mcp test JFK LAX 2026-12-15         # run a real search
+flights-mcp test ZRH LIS 2026-10-05 2026-10-12   # round-trip
 flights-mcp version
 ```
 
@@ -83,9 +88,9 @@ flights-mcp version
 
 ### `search_flights`
 
-Search for flights between airports.
+Search for flights between airports. Returns flight options with prices,
+times, airlines, duration, and stops, sorted by price.
 
-**Parameters:**
 | Parameter | Required | Description |
 |-----------|----------|-------------|
 | `from_airport` | Yes | Origin airport IATA code (e.g., 'JFK') |
@@ -96,21 +101,22 @@ Search for flights between airports.
 | `seat_class` | No | 'economy', 'premium-economy', 'business', 'first' |
 | `passengers_adults` | No | Number of adults (default: 1) |
 | `passengers_children` | No | Number of children (default: 0) |
+| `passengers_infants_in_seat` | No | Infants in seat (default: 0) |
+| `passengers_infants_on_lap` | No | Infants on lap (default: 0) |
 
 ### `get_airport_info`
 
 Get information about an airport by IATA code.
 
-**Parameters:**
 | Parameter | Required | Description |
 |-----------|----------|-------------|
 | `airport_code` | Yes | Airport IATA code (e.g., 'JFK', 'LAX') |
 
 ### `validate_flight_params`
 
-Validate search parameters before making a search.
+Validate search parameters (airport codes, dates, passenger counts)
+before making a search.
 
-**Parameters:**
 | Parameter | Required | Description |
 |-----------|----------|-------------|
 | `from_airport` | Yes | Origin airport code |
@@ -121,117 +127,61 @@ Validate search parameters before making a search.
 
 ## Configuration
 
-Configuration is done via environment variables:
+All configuration is optional and done via environment variables
+(see `.env.example`):
 
-```bash
-# Server settings
-SERVER_NAME=flights-mcp
-SERVER_VERSION=1.0.0
-LOG_LEVEL=info
-
-# Scraper
-REQUEST_TIMEOUT=30s
-MAX_RETRIES=3
-
-# Rate limiting
-RATE_LIMIT_REQUESTS=60
-RATE_LIMIT_WINDOW=60s
-
-# Anti-bot
-PROXY_URL=
-```
-
-Copy `.env.example` to `.env` and customize as needed.
-
-## Project Structure
-
-```
-flights-mcp/
-├── cmd/
-│   └── flights-mcp/
-│       └── main.go           # CLI entry point
-├── internal/
-│   ├── config/               # Configuration management
-│   ├── mcp/                  # MCP server and tools
-│   ├── scraper/              # HTTP scraper implementation
-│   ├── flights/              # Business logic, validation
-│   └── airports/             # Airport database
-├── pkg/
-│   └── models/               # Data models
-├── Makefile
-├── Dockerfile
-└── go.mod
-```
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `REQUEST_TIMEOUT` | `30s` | HTTP timeout per search request |
+| `MAX_RETRIES` | `3` | Search retry attempts |
+| `RETRY_DELAY` | `2s` | Delay between retries |
+| `RATE_LIMIT_REQUESTS` | `60` | Max searches per window |
+| `RATE_LIMIT_WINDOW` | `60s` | Rate limit window |
+| `PROXY_URL` | – | HTTP proxy for outgoing requests |
+| `AIRPORTS_FILE` | – | Override the embedded airport database |
+| `LOG_LEVEL` | `info` | Log verbosity |
 
 ## Development
 
-### Building
-
 ```bash
-# Build for current platform
-make build
-
-# Build for all platforms
-make build-all
-
-# Run tests
-make test
-
-# Run linter
-make lint
+make test      # go test -race ./...
+make lint      # golangci-lint
+make build     # build for current platform
+make help      # all targets
 ```
 
-### Testing
+Project layout:
 
-```bash
-# Run all tests
-go test -v ./...
-
-# Run with coverage
-make test-coverage
+```
+cmd/flights-mcp/    CLI entry point (cobra)
+internal/mcp/       MCP server and tool handlers
+internal/scraper/   tfs protobuf encoder + HTTP scraper + HTML parser
+internal/flights/   business logic, validation, rate limiting
+internal/airports/  embedded airport database
+pkg/models/         data models
 ```
 
-### Docker
+## Caveats
 
-```bash
-# Build Docker image
-make docker-build
+This scrapes Google Flights, which is an unofficial, undocumented
+interface:
 
-# Run in Docker
-docker run -it flights-mcp:latest info
-```
+- The HTML markup is Google-internal and can change without notice,
+  breaking the parser.
+- Google may rate-limit or block automated access; the built-in rate
+  limiter, user-agent rotation, and `PROXY_URL` help but are no guarantee.
+- Prices are informational — always verify before booking.
 
-## Known Limitations
-
-### Google Flights Scraping
-
-The scraper encodes the search as the same protobuf `tfs=` URL parameter
-the Google Flights frontend uses, fetches the server-rendered results page
-with a consent cookie, and parses the HTML — no browser involved. This is
-fast and reliable today, but the page markup is Google-internal and may
-change without notice.
-
-Google Flights also uses anti-bot measures that may block scraping:
-- Cookie consent walls
-- Rate limiting
-- Browser fingerprinting
-
-Countermeasures included:
-- Consent cookies pre-set on requests
-- User agent rotation, optional proxy support
-
-**Scraping may fail** if Google's anti-bot detection is triggered or the page layout changes. For production use, consider:
-- Using a paid flight API (Amadeus, Skyscanner)
-- Running with a residential proxy
-- Respecting rate limits
+For production workloads, consider an official flight API
+(Amadeus, Skyscanner, Duffel).
 
 ## License
 
-MIT License - see [LICENSE](LICENSE)
+MIT — see [LICENSE](LICENSE).
 
 ## Acknowledgments
 
-- [mcp-go](https://github.com/mark3labs/mcp-go) - MCP SDK for Go
-- [goquery](https://github.com/PuerkitoBio/goquery) - HTML parsing
-- [cobra](https://github.com/spf13/cobra) - CLI framework
-- [fast-flights](https://github.com/AWeirdDev/flights) - reverse-engineered tfs protobuf schema
+- [fast-flights](https://github.com/AWeirdDev/flights) — reverse-engineered `tfs` protobuf schema
+- [mcp-go](https://github.com/mark3labs/mcp-go) — MCP SDK for Go
+- [goquery](https://github.com/PuerkitoBio/goquery) — HTML parsing
+- [cobra](https://github.com/spf13/cobra) — CLI framework
