@@ -1,8 +1,8 @@
 .claude
 # Binaries
 bin/
-flights-mcp
-flights-mcp-*
+/flights-mcp
+/flights-mcp-*
 *.exe
 *.exe~
 *.dll
