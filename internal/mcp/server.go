@@ -5,7 +5,7 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
-	"github.com/dvitali/flights-mcp/internal/flights"
+	"github.com/denysvitali/flights-mcp/internal/flights"
 )
 
 // Server wraps the MCP server with flight service functionality.

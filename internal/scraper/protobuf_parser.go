@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/dvitali/flights-mcp/pkg/models"
+	"github.com/denysvitali/flights-mcp/pkg/models"
 )
 
 // ParseGoogleFlightsResponse parses the Google Flights protobuf-as-JSON response.
@@ -16,9 +16,7 @@ func ParseGoogleFlightsResponse(data []byte) ([]*models.FlightResult, error) {
 	dataStr := string(data)
 
 	// Remove the )]}' prefix if present
-	if strings.HasPrefix(dataStr, ")]}'") {
-		dataStr = dataStr[4:]
-	}
+	dataStr = strings.TrimPrefix(dataStr, ")]}'")
 
 	// Skip the length line
 	if idx := strings.Index(dataStr, "\n"); idx != -1 {
@@ -272,7 +270,7 @@ func ParseFlightsFromRawData(data []byte) []*models.FlightResult {
 		// Count stops - look for intermediate airports
 		stops := 0
 		if strings.Count(context, `"ATL"`) > 0 || strings.Count(context, `"ORD"`) > 0 ||
-		   strings.Count(context, `"DFW"`) > 0 || strings.Count(context, `"DEN"`) > 0 {
+			strings.Count(context, `"DFW"`) > 0 || strings.Count(context, `"DEN"`) > 0 {
 			stops = 1
 		}
 

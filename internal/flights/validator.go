@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dvitali/flights-mcp/internal/airports"
-	"github.com/dvitali/flights-mcp/pkg/models"
+	"github.com/denysvitali/flights-mcp/internal/airports"
+	"github.com/denysvitali/flights-mcp/pkg/models"
 )
 
 // Validator validates flight search requests.
@@ -74,10 +74,10 @@ func (v *Validator) Validate(req *models.FlightSearchRequest) *ValidationResult 
 			if err != nil {
 				result.Valid = false
 				result.Errors = append(result.Errors, fmt.Sprintf("Invalid return date format: %s (use YYYY-MM-DD)", req.ReturnDate))
-			} else if depDate.IsZero() == false && retDate.Before(depDate) {
+			} else if !depDate.IsZero() && retDate.Before(depDate) {
 				result.Valid = false
 				result.Errors = append(result.Errors, "Return date cannot be before departure date")
-			} else if depDate.IsZero() == false && retDate.Equal(depDate) {
+			} else if !depDate.IsZero() && retDate.Equal(depDate) {
 				result.Warnings = append(result.Warnings, "Return date is the same as departure date - consider a one-way trip")
 			}
 		}

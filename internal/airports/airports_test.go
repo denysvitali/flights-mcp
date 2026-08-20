@@ -76,11 +76,11 @@ func TestDatabase_LoadFromJSON(t *testing.T) {
 
 func TestDatabase_Get(t *testing.T) {
 	db := NewDatabase()
-	db.LoadFromJSON([]byte(`{
+	require.NoError(t, db.LoadFromJSON([]byte(`{
 		"airports": [
 			{"code": "JFK", "name": "JFK Airport", "city": "NYC", "country": "USA"}
 		]
-	}`))
+	}`)))
 
 	// Valid code
 	airport, ok := db.Get("JFK")
@@ -105,11 +105,11 @@ func TestDatabase_Get(t *testing.T) {
 
 func TestDatabase_Exists(t *testing.T) {
 	db := NewDatabase()
-	db.LoadFromJSON([]byte(`{
+	require.NoError(t, db.LoadFromJSON([]byte(`{
 		"airports": [
 			{"code": "JFK", "name": "JFK", "city": "NYC", "country": "USA"}
 		]
-	}`))
+	}`)))
 
 	assert.True(t, db.Exists("JFK"))
 	assert.True(t, db.Exists("jfk"))
@@ -118,12 +118,12 @@ func TestDatabase_Exists(t *testing.T) {
 
 func TestDatabase_All(t *testing.T) {
 	db := NewDatabase()
-	db.LoadFromJSON([]byte(`{
+	require.NoError(t, db.LoadFromJSON([]byte(`{
 		"airports": [
 			{"code": "JFK", "name": "JFK", "city": "NYC", "country": "USA"},
 			{"code": "LAX", "name": "LAX", "city": "LA", "country": "USA"}
 		]
-	}`))
+	}`)))
 
 	all := db.All()
 	assert.Len(t, all, 2)

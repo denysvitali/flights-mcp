@@ -15,6 +15,7 @@ type Config struct {
 	LogLevel      string
 
 	// Scraper settings
+	ScraperBackend string // "http" (default, no browser) or "chrome"
 	ChromePath     string
 	HeadlessMode   bool
 	RequestTimeout time.Duration
@@ -43,6 +44,7 @@ func Load() *Config {
 		LogLevel:      getEnv("LOG_LEVEL", "info"),
 
 		// Scraper settings
+		ScraperBackend: getEnv("SCRAPER_BACKEND", "http"),
 		ChromePath:     getEnv("CHROME_PATH", ""),
 		HeadlessMode:   getEnvBool("HEADLESS_MODE", true),
 		RequestTimeout: getEnvDuration("REQUEST_TIMEOUT", 30*time.Second),
@@ -58,8 +60,8 @@ func Load() *Config {
 		RandomDelayMax: getEnvDuration("RANDOM_DELAY_MAX", 3*time.Second),
 		ProxyURL:       getEnv("PROXY_URL", ""),
 
-		// Airports
-		AirportsFile: getEnv("AIRPORTS_FILE", "internal/airports/airports.json"),
+		// Airports (empty = use the database embedded in the binary)
+		AirportsFile: getEnv("AIRPORTS_FILE", ""),
 	}
 }
 

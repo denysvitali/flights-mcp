@@ -9,10 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dvitali/flights-mcp/internal/airports"
-	"github.com/dvitali/flights-mcp/internal/config"
-	"github.com/dvitali/flights-mcp/internal/scraper"
-	"github.com/dvitali/flights-mcp/pkg/models"
+	"github.com/denysvitali/flights-mcp/internal/airports"
+	"github.com/denysvitali/flights-mcp/internal/config"
+	"github.com/denysvitali/flights-mcp/internal/scraper"
+	"github.com/denysvitali/flights-mcp/pkg/models"
 )
 
 // Service provides flight search functionality.

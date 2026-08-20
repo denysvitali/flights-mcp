@@ -1,4 +1,4 @@
-module github.com/dvitali/flights-mcp
+module github.com/denysvitali/flights-mcp
 
 go 1.25.4
 

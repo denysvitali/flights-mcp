@@ -4,7 +4,7 @@ package scraper
 import (
 	"context"
 
-	"github.com/dvitali/flights-mcp/pkg/models"
+	"github.com/denysvitali/flights-mcp/pkg/models"
 )
 
 // ScrapeResult contains the results of a scraping operation.

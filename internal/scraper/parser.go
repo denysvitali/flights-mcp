@@ -8,7 +8,7 @@ import (
 
 	"github.com/PuerkitoBio/goquery"
 
-	"github.com/dvitali/flights-mcp/pkg/models"
+	"github.com/denysvitali/flights-mcp/pkg/models"
 )
 
 // Parser extracts flight data from HTML.
@@ -212,7 +212,7 @@ func (p *Parser) parseFromSelectors(doc *goquery.Document) []*models.FlightResul
 
 		// Must have some price indicator
 		if !strings.Contains(text, "$") && !strings.Contains(text, "€") &&
-		   !strings.Contains(text, "£") && !strings.Contains(text, "franc") {
+			!strings.Contains(text, "£") && !strings.Contains(text, "franc") {
 			return
 		}
 

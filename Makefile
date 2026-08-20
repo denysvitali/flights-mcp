@@ -59,7 +59,7 @@ test-short:
 # Run linter
 lint:
 	@echo "Running linter..."
-	@which golangci-lint > /dev/null || (echo "Installing golangci-lint..." && go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest)
+	@which golangci-lint > /dev/null || (echo "Installing golangci-lint..." && go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest)
 	golangci-lint run
 
 # Format code

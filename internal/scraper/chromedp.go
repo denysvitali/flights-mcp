@@ -2,7 +2,6 @@ package scraper
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -14,16 +13,16 @@ import (
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
 
-	"github.com/dvitali/flights-mcp/pkg/models"
+	"github.com/denysvitali/flights-mcp/pkg/models"
 )
 
 // ChromeDPScraper implements the Scraper interface using chromedp.
 type ChromeDPScraper struct {
-	config    *AntiBotConfig
-	allocCtx  context.Context
-	cancel    context.CancelFunc
-	parser    *Parser
-	timeout   time.Duration
+	config   *AntiBotConfig
+	allocCtx context.Context
+	cancel   context.CancelFunc
+	parser   *Parser
+	timeout  time.Duration
 }
 
 // NewChromeDPScraper creates a new ChromeDPScraper.
@@ -59,6 +58,11 @@ func NewChromeDPScraper(config *AntiBotConfig, timeout time.Duration) (*ChromeDP
 	// Add proxy if configured
 	if config.ProxyURL != "" {
 		opts = append(opts, chromedp.ProxyServer(config.ProxyURL))
+	}
+
+	// Use an explicit Chrome binary if configured
+	if config.ChromePath != "" {
+		opts = append(opts, chromedp.ExecPath(config.ChromePath))
 	}
 
 	// Create allocator context
@@ -98,7 +102,7 @@ func (s *ChromeDPScraper) SearchFlights(ctx context.Context, req *models.FlightS
 			url := e.Response.URL
 			// Track URLs we're interested in
 			if strings.Contains(url, "FlightsFrontendService") ||
-			   strings.Contains(url, "batchexecute") {
+				strings.Contains(url, "batchexecute") {
 				responseMu.Lock()
 				responseURLs[e.RequestID] = url
 				responseMu.Unlock()
@@ -224,7 +228,7 @@ func (s *ChromeDPScraper) SearchFlights(ctx context.Context, req *models.FlightS
 	// Save API responses for debugging
 	for i, resp := range apiResponses {
 		debugFile := fmt.Sprintf("/tmp/flights_api_%d.json", i)
-		os.WriteFile(debugFile, resp, 0644)
+		_ = os.WriteFile(debugFile, resp, 0644)
 		log.Printf("Saved API response to %s", debugFile)
 	}
 
@@ -290,98 +294,6 @@ func (s *ChromeDPScraper) parseAPIResponses(responses [][]byte) *ScrapeResult {
 		Flights:       flights,
 		CheapestPrice: cheapest,
 	}
-}
-
-// extractFlightsFromJSON tries to extract flight data from a JSON response.
-func (s *ChromeDPScraper) extractFlightsFromJSON(data []byte) []*models.FlightResult {
-	var flights []*models.FlightResult
-
-	// Google's batchexecute responses have a specific format
-	// They often start with )]}'  followed by JSON
-	dataStr := string(data)
-	if strings.HasPrefix(dataStr, ")]}'") {
-		dataStr = dataStr[4:]
-		data = []byte(dataStr)
-	}
-
-	// Try to parse as JSON array
-	var jsonData interface{}
-	if err := json.Unmarshal(data, &jsonData); err != nil {
-		// Not valid JSON, try to extract embedded JSON
-		flights = s.extractFlightsFromText(dataStr)
-		return flights
-	}
-
-	// Recursively search for flight data in the JSON structure
-	flights = s.searchJSONForFlights(jsonData)
-	return flights
-}
-
-// searchJSONForFlights recursively searches JSON for flight data.
-func (s *ChromeDPScraper) searchJSONForFlights(data interface{}) []*models.FlightResult {
-	var flights []*models.FlightResult
-
-	switch v := data.(type) {
-	case []interface{}:
-		// Check if this array looks like flight data
-		if flight := s.tryParseAsFlightArray(v); flight != nil {
-			flights = append(flights, flight)
-		}
-		// Recurse into array elements
-		for _, item := range v {
-			flights = append(flights, s.searchJSONForFlights(item)...)
-		}
-	case map[string]interface{}:
-		// Recurse into map values
-		for _, val := range v {
-			flights = append(flights, s.searchJSONForFlights(val)...)
-		}
-	}
-
-	return flights
-}
-
-// tryParseAsFlightArray checks if an array contains flight data.
-func (s *ChromeDPScraper) tryParseAsFlightArray(arr []interface{}) *models.FlightResult {
-	// Google's flight data often has specific patterns
-	// Look for arrays that contain price, airline, times, etc.
-
-	// This is heuristic - look for arrays with expected flight data patterns
-	hasPrice := false
-	hasAirline := false
-
-	for _, item := range arr {
-		switch v := item.(type) {
-		case float64:
-			// Could be a price if it's in reasonable range
-			if v > 50 && v < 50000 {
-				hasPrice = true
-			}
-		case string:
-			// Could be airline name
-			airlines := []string{"United", "Delta", "American", "JetBlue", "Southwest", "Frontier", "Spirit", "Alaska"}
-			for _, airline := range airlines {
-				if strings.Contains(v, airline) {
-					hasAirline = true
-					break
-				}
-			}
-		}
-	}
-
-	// TODO: Implement more sophisticated parsing based on actual API structure
-	// For now, return nil - we'll rely on HTML parsing
-	_ = hasPrice
-	_ = hasAirline
-
-	return nil
-}
-
-// extractFlightsFromText extracts flight data from text that may contain embedded JSON.
-func (s *ChromeDPScraper) extractFlightsFromText(text string) []*models.FlightResult {
-	// Look for price patterns and airline names in the text
-	// This is a fallback when JSON parsing fails
-	return nil
 }
 
 // parseFlightPrice extracts a numeric price from a price string.
@@ -469,7 +381,7 @@ func (s *ChromeDPScraper) waitForResults() chromedp.ActionFunc {
 			`[jsname="IWWDBc"]`,
 			`.gws-flights-results__result-item`,
 			`[data-ved]`,
-			`ul li`,  // Generic list items as fallback
+			`ul li`, // Generic list items as fallback
 		}
 
 		for _, selector := range selectors {

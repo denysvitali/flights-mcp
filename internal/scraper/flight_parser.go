@@ -6,7 +6,7 @@ import (
 	"log"
 	"strings"
 
-	"github.com/dvitali/flights-mcp/pkg/models"
+	"github.com/denysvitali/flights-mcp/pkg/models"
 )
 
 // GoogleFlightData represents a single flight offering from Google Flights.
@@ -39,9 +39,7 @@ func ParseGoogleFlightsData(data []byte) ([]*models.FlightResult, error) {
 	dataStr := string(data)
 
 	// Skip the )]}' prefix if present
-	if strings.HasPrefix(dataStr, ")]}'") {
-		dataStr = dataStr[4:]
-	}
+	dataStr = strings.TrimPrefix(dataStr, ")]}'")
 
 	// Skip the length line
 	if idx := strings.Index(dataStr, "\n"); idx != -1 {
@@ -320,38 +318,6 @@ func tryParseAsFlightWithPrice(arr []interface{}, price int) *models.FlightResul
 		Price:         priceStr,
 		IsBest:        false,
 	}
-}
-
-// countStops counts intermediate airports in the flight data.
-func countStops(arr []interface{}, origin, destination string) int {
-	airports := make(map[string]bool)
-
-	var findAirports func(interface{})
-	findAirports = func(v interface{}) {
-		switch item := v.(type) {
-		case string:
-			if len(item) == 3 && item == strings.ToUpper(item) {
-				airports[item] = true
-			}
-		case []interface{}:
-			for _, sub := range item {
-				findAirports(sub)
-			}
-		}
-	}
-	findAirports(arr)
-
-	// Remove origin and destination
-	delete(airports, origin)
-	delete(airports, destination)
-
-	// Common non-airport 3-letter codes to ignore
-	delete(airports, "USA")
-	delete(airports, "USD")
-	delete(airports, "CHF")
-	delete(airports, "EUR")
-
-	return len(airports)
 }
 
 // toInt converts an interface{} to int.

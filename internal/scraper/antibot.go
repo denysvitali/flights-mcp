@@ -15,6 +15,7 @@ type AntiBotConfig struct {
 	DisableAutomation   bool
 	HeadlessMode        bool
 	ProxyURL            string
+	ChromePath          string
 }
 
 // DefaultAntiBotConfig returns the default anti-bot configuration.
@@ -78,8 +79,8 @@ var defaultUserAgents = []string{
 // Cookie consent button selectors for various consent dialogs.
 var cookieConsentSelectors = []string{
 	// Google consent dialog (EU/GDPR) - most common patterns
-	`button[jsname="b3VHJd"]`,           // Google's "Accept all" button jsname
-	`button[jsname="higCR"]`,            // Alternative Google consent button
+	`button[jsname="b3VHJd"]`, // Google's "Accept all" button jsname
+	`button[jsname="higCR"]`,  // Alternative Google consent button
 	`form[action*="consent.google.com"] button`,
 	`[data-ved] button[jsaction*="click"]`,
 
@@ -89,9 +90,9 @@ var cookieConsentSelectors = []string{
 	`button[aria-label*="accept"]`,
 
 	// Generic consent buttons by ID/class
-	`#L2AGLb`,                           // Common Google Accept button ID
-	`#W0wltc`,                           // Another Google consent button ID
-	`.QS5gu`,                            // Google consent button class
+	`#L2AGLb`, // Common Google Accept button ID
+	`#W0wltc`, // Another Google consent button ID
+	`.QS5gu`,  // Google consent button class
 
 	// GDPR consent frameworks
 	`#onetrust-accept-btn-handler`,

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/dvitali/flights-mcp/pkg/models"
+	"github.com/denysvitali/flights-mcp/pkg/models"
 )
 
 // airportsData represents the JSON structure for airports.

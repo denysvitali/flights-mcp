@@ -1,0 +1,17 @@
+version: "2"
+
+linters:
+  settings:
+    errcheck:
+      exclude-functions:
+        # Writes to stdout / strings.Builder cannot meaningfully fail here.
+        - fmt.Fprintf
+        - fmt.Fprintln
+        # Sscanf failures intentionally leave the zero value in the
+        # best-effort response parsers.
+        - fmt.Sscanf
+    staticcheck:
+      checks:
+        - all
+        # WriteString(fmt.Sprintf(...)) reads fine; no need to churn.
+        - -QF1012

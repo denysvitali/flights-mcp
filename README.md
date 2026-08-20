@@ -7,10 +7,11 @@ A Model Context Protocol (MCP) server that exposes Google Flights search functio
 ## Features
 
 - **Flight Search**: Search for flights between airports using Google Flights
-- **Airport Information**: Get details about airports (50+ major airports included)
+- **No Browser Needed**: Default scraper uses plain HTTP with a protobuf-encoded search URL — no Chrome required
+- **Airport Information**: Get details about airports (50+ major airports embedded in the binary)
 - **Parameter Validation**: Validate flight search parameters before making requests
 - **MCP Compliant**: Built using the mcp-go SDK
-- **Anti-Bot Measures**: Headless Chrome with stealth techniques for reliable scraping
+- **Optional Chrome Backend**: Headless Chrome with stealth techniques as a fallback (`SCRAPER_BACKEND=chrome`)
 - **Single Binary**: No runtime dependencies, easy deployment
 
 ## Installation
@@ -19,7 +20,7 @@ A Model Context Protocol (MCP) server that exposes Google Flights search functio
 
 ```bash
 # Clone the repository
-git clone https://github.com/dvitali/flights-mcp.git
+git clone https://github.com/denysvitali/flights-mcp.git
 cd flights-mcp
 
 # Build the binary
@@ -31,12 +32,12 @@ make install
 
 ### From Binary
 
-Download the latest release from the [Releases](https://github.com/dvitali/flights-mcp/releases) page.
+Download the latest release from the [Releases](https://github.com/denysvitali/flights-mcp/releases) page.
 
 ### Requirements
 
-- Go 1.22+ (for building)
-- Chrome/Chromium (for scraping)
+- Go 1.25+ (for building)
+- Chrome/Chromium (only for the optional `chrome` scraper backend)
 
 ## Usage
 
@@ -130,7 +131,8 @@ SERVER_NAME=flights-mcp
 SERVER_VERSION=1.0.0
 LOG_LEVEL=info
 
-# Chrome/Scraper
+# Scraper: "http" (default, no browser) or "chrome"
+SCRAPER_BACKEND=http
 CHROME_PATH=/usr/bin/chromium
 HEADLESS_MODE=true
 REQUEST_TIMEOUT=30s
@@ -210,19 +212,23 @@ docker run -it flights-mcp:latest info
 
 ### Google Flights Scraping
 
-Google Flights uses anti-bot measures that may block scraping:
+The default `http` backend encodes the search as the same protobuf `tfs=`
+URL parameter the Google Flights frontend uses, fetches the server-rendered
+results page with a consent cookie, and parses the HTML — no browser
+involved. This is fast and reliable today, but the page markup is
+Google-internal and may change without notice.
+
+Google Flights also uses anti-bot measures that may block scraping:
 - Cookie consent walls
 - Rate limiting
 - Browser fingerprinting
 
-The scraper includes countermeasures:
-- Headless Chrome with stealth options
-- Random delays between actions
-- Cookie consent handling
-- Realistic user agent rotation
-- Optional proxy support
+Countermeasures included:
+- Consent cookies pre-set on requests (http backend)
+- Headless Chrome with stealth options (chrome backend)
+- Random delays, user agent rotation, optional proxy support
 
-**Scraping may fail** if Google's anti-bot detection is triggered. For production use, consider:
+**Scraping may fail** if Google's anti-bot detection is triggered or the page layout changes. For production use, consider:
 - Using a paid flight API (Amadeus, Skyscanner)
 - Running with a residential proxy
 - Respecting rate limits

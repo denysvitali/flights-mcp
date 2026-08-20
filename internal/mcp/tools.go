@@ -7,8 +7,8 @@ import (
 
 	"github.com/mark3labs/mcp-go/mcp"
 
-	"github.com/dvitali/flights-mcp/internal/flights"
-	"github.com/dvitali/flights-mcp/pkg/models"
+	"github.com/denysvitali/flights-mcp/internal/flights"
+	"github.com/denysvitali/flights-mcp/pkg/models"
 )
 
 // handleSearchFlights handles the search_flights tool call.

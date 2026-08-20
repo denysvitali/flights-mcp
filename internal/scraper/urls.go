@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dvitali/flights-mcp/pkg/models"
+	"github.com/denysvitali/flights-mcp/pkg/models"
 )
 
 // BuildGoogleFlightsURL builds a Google Flights search URL from a request.
