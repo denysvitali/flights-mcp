@@ -77,7 +77,7 @@ jobs:
           ./flights-mcp info
           ./flights-mcp version
           ./flights-mcp airport JFK
-          ./flights-mcp validate JFK LAX 2025-12-15
+          ./flights-mcp validate JFK LAX "$(date -d '+30 days' +%Y-%m-%d)"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
