@@ -15,9 +15,6 @@ type Config struct {
 	LogLevel      string
 
 	// Scraper settings
-	ScraperBackend string // "http" (default, no browser) or "chrome"
-	ChromePath     string
-	HeadlessMode   bool
 	RequestTimeout time.Duration
 	MaxRetries     int
 	RetryDelay     time.Duration
@@ -27,9 +24,7 @@ type Config struct {
 	RateLimitWindow   time.Duration
 
 	// Anti-bot settings
-	RandomDelayMin time.Duration
-	RandomDelayMax time.Duration
-	ProxyURL       string
+	ProxyURL string
 
 	// Airports
 	AirportsFile string
@@ -44,9 +39,6 @@ func Load() *Config {
 		LogLevel:      getEnv("LOG_LEVEL", "info"),
 
 		// Scraper settings
-		ScraperBackend: getEnv("SCRAPER_BACKEND", "http"),
-		ChromePath:     getEnv("CHROME_PATH", ""),
-		HeadlessMode:   getEnvBool("HEADLESS_MODE", true),
 		RequestTimeout: getEnvDuration("REQUEST_TIMEOUT", 30*time.Second),
 		MaxRetries:     getEnvInt("MAX_RETRIES", 3),
 		RetryDelay:     getEnvDuration("RETRY_DELAY", 2*time.Second),
@@ -56,9 +48,7 @@ func Load() *Config {
 		RateLimitWindow:   getEnvDuration("RATE_LIMIT_WINDOW", 60*time.Second),
 
 		// Anti-bot settings
-		RandomDelayMin: getEnvDuration("RANDOM_DELAY_MIN", 1*time.Second),
-		RandomDelayMax: getEnvDuration("RANDOM_DELAY_MAX", 3*time.Second),
-		ProxyURL:       getEnv("PROXY_URL", ""),
+		ProxyURL: getEnv("PROXY_URL", ""),
 
 		// Airports (empty = use the database embedded in the binary)
 		AirportsFile: getEnv("AIRPORTS_FILE", ""),
@@ -78,16 +68,6 @@ func getEnvInt(key string, defaultVal int) int {
 	if val := os.Getenv(key); val != "" {
 		if intVal, err := strconv.Atoi(val); err == nil {
 			return intVal
-		}
-	}
-	return defaultVal
-}
-
-// getEnvBool returns the value of an environment variable as a bool or a default value.
-func getEnvBool(key string, defaultVal bool) bool {
-	if val := os.Getenv(key); val != "" {
-		if boolVal, err := strconv.ParseBool(val); err == nil {
-			return boolVal
 		}
 	}
 	return defaultVal

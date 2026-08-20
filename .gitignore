@@ -61,6 +61,3 @@ dist/
 # Debug files
 debug
 __debug_bin*
-
-# Chrome user data (created by chromedp)
-chromedp-data/

@@ -69,24 +69,11 @@ func loadAirports(cfg *config.Config) (*airports.Database, error) {
 	return db, nil
 }
 
-// newScraper builds the scraper selected by SCRAPER_BACKEND: plain HTTP by
-// default, headless Chrome when set to "chrome".
-func newScraper(cfg *config.Config) (scraper.Scraper, error) {
+// newScraper builds the browser-less HTTP scraper from the application config.
+func newScraper(cfg *config.Config) scraper.Scraper {
 	antiBot := scraper.DefaultAntiBotConfig()
-	antiBot.HeadlessMode = cfg.HeadlessMode
 	antiBot.ProxyURL = cfg.ProxyURL
-	antiBot.MinDelay = cfg.RandomDelayMin
-	antiBot.MaxDelay = cfg.RandomDelayMax
-	antiBot.ChromePath = cfg.ChromePath
-
-	switch cfg.ScraperBackend {
-	case "chrome":
-		return scraper.NewChromeDPScraper(antiBot, cfg.RequestTimeout)
-	case "", "http":
-		return scraper.NewHTTPScraper(antiBot, cfg.RequestTimeout), nil
-	default:
-		return nil, fmt.Errorf("unknown SCRAPER_BACKEND %q (want 'http' or 'chrome')", cfg.ScraperBackend)
-	}
+	return scraper.NewHTTPScraper(antiBot, cfg.RequestTimeout)
 }
 
 func newRunCmd() *cobra.Command {
@@ -102,10 +89,7 @@ func newRunCmd() *cobra.Command {
 				return fmt.Errorf("loading airports: %w", err)
 			}
 
-			scr, err := newScraper(cfg)
-			if err != nil {
-				return fmt.Errorf("creating scraper: %w", err)
-			}
+			scr := newScraper(cfg)
 			defer func() { _ = scr.Close() }()
 
 			svc := flights.NewService(scr, db, cfg)
@@ -223,10 +207,7 @@ func newTestCmd() *cobra.Command {
 				return fmt.Errorf("loading airports: %w", err)
 			}
 
-			scr, err := newScraper(cfg)
-			if err != nil {
-				return fmt.Errorf("creating scraper: %w", err)
-			}
+			scr := newScraper(cfg)
 			defer func() { _ = scr.Close() }()
 
 			svc := flights.NewService(scr, db, cfg)

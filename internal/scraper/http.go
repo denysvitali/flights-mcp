@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -30,8 +31,16 @@ func NewHTTPScraper(config *AntiBotConfig, timeout time.Duration) *HTTPScraper {
 	if config == nil {
 		config = DefaultAntiBotConfig()
 	}
+
+	transport := http.DefaultTransport
+	if config.ProxyURL != "" {
+		if proxyURL, err := url.Parse(config.ProxyURL); err == nil {
+			transport = &http.Transport{Proxy: http.ProxyURL(proxyURL)}
+		}
+	}
+
 	return &HTTPScraper{
-		client:   &http.Client{Timeout: timeout},
+		client:   &http.Client{Timeout: timeout, Transport: transport},
 		config:   config,
 		currency: "USD",
 	}
